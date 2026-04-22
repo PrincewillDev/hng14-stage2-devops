@@ -33,7 +33,7 @@ jobs:
       - name: JS lint (eslint)
         working-directory: frontend
         run: |
-          npm ci
+          npm install
           npx eslint app.js
 
       - name: Dockerfile lint — api (hadolint)
