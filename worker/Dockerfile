@@ -25,7 +25,7 @@ USER app
 
 # Worker is a long-running queue consumer with no HTTP server.
 # Healthcheck verifies Redis is reachable and the script is importable.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=5 \
   CMD python -c "import redis, os; r = redis.Redis(host=os.getenv('REDIS_HOST','redis'), port=6379, password=os.getenv('REDIS_PASSWORD')); r.ping()"
 
 CMD ["python", "worker.py"]
