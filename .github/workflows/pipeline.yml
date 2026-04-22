@@ -200,6 +200,12 @@ jobs:
             COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' "$f")
             if [ "$COUNT" -gt 0 ]; then
               echo "CRITICAL vulnerabilities found in $f: $COUNT finding(s)"
+              echo "--- Details ---"
+              jq -r '
+                .runs[].results[]
+                | select(.level == "error")
+                | "CVE: \(.ruleId)  PKG: \(.locations[0].physicalLocation.artifactLocation.uri // "n/a")  MSG: \(.message.text)"
+              ' "$f"
               FAILED=1
             fi
           done
