@@ -197,13 +197,13 @@ jobs:
         run: |
           FAILED=0
           for f in trivy-api.sarif trivy-worker.sarif trivy-frontend.sarif; do
-            COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' "$f")
+            COUNT=$(jq '[.runs[].results[] | select(.message.text | contains("Severity: CRITICAL"))] | length' "$f")
             if [ "$COUNT" -gt 0 ]; then
               echo "CRITICAL vulnerabilities found in $f: $COUNT finding(s)"
               echo "--- Details ---"
               jq -r '
                 .runs[].results[]
-                | select(.level == "error")
+                | select(.message.text | contains("Severity: CRITICAL"))
                 | "CVE: \(.ruleId)  PKG: \(.locations[0].physicalLocation.artifactLocation.uri // "n/a")  MSG: \(.message.text)"
               ' "$f"
               FAILED=1
