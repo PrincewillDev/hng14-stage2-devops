@@ -159,7 +159,7 @@ jobs:
           docker load < /tmp/images/frontend.tar.gz
 
       - name: Scan api with Trivy
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/api:latest
           format: sarif
@@ -177,7 +177,7 @@ jobs:
           exit-code: "0"
 
       - name: Scan frontend with Trivy
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/frontend:latest
           format: sarif
