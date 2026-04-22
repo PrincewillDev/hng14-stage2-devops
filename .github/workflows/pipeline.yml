@@ -299,18 +299,15 @@ jobs:
             for SERVICE in api worker frontend; do
               echo "==> Rolling update: $SERVICE"
 
-              OLD_ID=$(sudo docker compose ps -q "$SERVICE" 2>/dev/null || true)
+              sudo docker compose ps -q "$SERVICE" 2>/dev/null > /tmp/old_ids.txt || true
 
               # Start new container alongside old one
               sudo docker compose up -d --no-deps --scale "${SERVICE}=2" "$SERVICE" || true
-              sleep 3
+              sleep 5
 
-              # Identify the new container
-              if [ -n "$OLD_ID" ]; then
-                NEW_ID=$(sudo docker compose ps -q "$SERVICE" | grep -v "$OLD_ID" | head -1)
-              else
-                NEW_ID=$(sudo docker compose ps -q "$SERVICE" | head -1)
-              fi
+              # Identify the new container (ID not in the pre-scale list)
+              NEW_ID=$(sudo docker compose ps -q "$SERVICE" 2>/dev/null | grep -vxFf /tmp/old_ids.txt | head -1)
+              OLD_ID=$(cat /tmp/old_ids.txt | head -1)
 
               if [ -z "$NEW_ID" ]; then
                 echo "Failed to start new container for $SERVICE"
