@@ -276,7 +276,7 @@ jobs:
   deploy:
     name: Deploy
     needs: integration-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -293,23 +293,23 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
 
             # Pull latest images
-            docker compose pull
+            sudo docker compose pull
 
             # Roll each service individually
             for SERVICE in api worker frontend; do
               echo "==> Rolling update: $SERVICE"
 
-              OLD_ID=$(docker compose ps -q "$SERVICE" 2>/dev/null || true)
+              OLD_ID=$(sudo docker compose ps -q "$SERVICE" 2>/dev/null || true)
 
               # Start new container alongside old one
-              docker compose up -d --no-deps --scale "${SERVICE}=2" "$SERVICE" || true
+              sudo docker compose up -d --no-deps --scale "${SERVICE}=2" "$SERVICE" || true
               sleep 3
 
               # Identify the new container
               if [ -n "$OLD_ID" ]; then
-                NEW_ID=$(docker compose ps -q "$SERVICE" | grep -v "$OLD_ID" | head -1)
+                NEW_ID=$(sudo docker compose ps -q "$SERVICE" | grep -v "$OLD_ID" | head -1)
               else
-                NEW_ID=$(docker compose ps -q "$SERVICE" | head -1)
+                NEW_ID=$(sudo docker compose ps -q "$SERVICE" | head -1)
               fi
 
               if [ -z "$NEW_ID" ]; then
@@ -322,7 +322,7 @@ jobs:
               DEADLINE=$(($(date +%s) + 60))
 
               while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-                HEALTH=$(docker inspect -f \
+                HEALTH=$(sudo docker inspect -f \
                   '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
                   "$NEW_ID" 2>/dev/null || echo "unknown")
 
@@ -334,11 +334,11 @@ jobs:
               done
 
               if [ "$HEALTHY" = "true" ]; then
-                [ -n "$OLD_ID" ] && docker stop "$OLD_ID" && docker rm "$OLD_ID" || true
-                docker compose up -d --no-deps --scale "${SERVICE}=1" "$SERVICE" || true
+                [ -n "$OLD_ID" ] && sudo docker stop "$OLD_ID" && sudo docker rm "$OLD_ID" || true
+                sudo docker compose up -d --no-deps --scale "${SERVICE}=1" "$SERVICE" || true
                 echo "$SERVICE updated successfully"
               else
-                docker stop "$NEW_ID" && docker rm "$NEW_ID" || true
+                sudo docker stop "$NEW_ID" && sudo docker rm "$NEW_ID" || true
                 echo "Health check timed out for $SERVICE — old container preserved, aborting"
                 exit 1
               fi
