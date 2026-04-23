@@ -319,6 +319,10 @@ jobs:
               exit 1
             fi
 
+            # Clean up stopped/dangling containers from prior failed deploys
+            echo "==> Pruning stopped containers"
+            sudo docker container prune -f
+
             # Roll each stateless service individually
             for SERVICE in api worker frontend; do
               echo "==> Rolling update: $SERVICE"
@@ -337,12 +341,21 @@ jobs:
 
               echo "Old container: $OLD_ID"
 
-              # Scale up preserving the old container (--no-recreate keeps old ID stable)
-              sudo docker compose up -d --no-deps --no-recreate --scale "${SERVICE}=$((OLD_COUNT + 1))" "$SERVICE"
-              sleep 5
+              # Services with published host ports can't run two copies simultaneously
+              # (port conflict). Use stop-then-replace for those; scale-based rolling
+              # for internal-only services.
+              if [ "$SERVICE" = "frontend" ]; then
+                echo "Stopping old $SERVICE container (port-bound service)"
+                sudo docker stop "$OLD_ID" && sudo docker rm "$OLD_ID" || true
+                sudo docker compose up -d --no-deps "$SERVICE"
+                NEW_ID=$(sudo docker compose ps -q "$SERVICE" | head -1)
+              else
+                # Scale up preserving the old container (--no-recreate keeps old ID stable)
+                sudo docker compose up -d --no-deps --no-recreate --scale "${SERVICE}=$((OLD_COUNT + 1))" "$SERVICE"
+                sleep 5
+                NEW_ID=$(sudo docker compose ps -q "$SERVICE" 2>/dev/null | grep -vxFf /tmp/old_ids.txt | head -1)
+              fi
 
-              # Identify the new container (ID not in the pre-scale list)
-              NEW_ID=$(sudo docker compose ps -q "$SERVICE" 2>/dev/null | grep -vxFf /tmp/old_ids.txt | head -1)
               echo "New container: $NEW_ID"
 
               if [ -z "$NEW_ID" ] || [ "$NEW_ID" = "$OLD_ID" ]; then
@@ -367,8 +380,11 @@ jobs:
               done
 
               if [ "$HEALTHY" = "true" ]; then
-                sudo docker stop "$OLD_ID" && sudo docker rm "$OLD_ID" || true
-                sudo docker compose up -d --no-deps --no-recreate --scale "${SERVICE}=1" "$SERVICE" || true
+                # For scale-rolled services, stop the old container and scale back to 1
+                if [ "$SERVICE" != "frontend" ]; then
+                  sudo docker stop "$OLD_ID" && sudo docker rm "$OLD_ID" || true
+                  sudo docker compose up -d --no-deps --no-recreate --scale "${SERVICE}=1" "$SERVICE" || true
+                fi
                 echo "$SERVICE updated successfully"
               else
                 sudo docker stop "$NEW_ID" && sudo docker rm "$NEW_ID" || true
