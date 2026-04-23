@@ -292,25 +292,39 @@ jobs:
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
 
-            # Pull latest images
-            sudo docker compose pull
+            # Pull latest source and build images locally
+            git fetch origin main
+            git reset --hard origin/main
+            sudo docker compose build
 
             # Roll each service individually
             for SERVICE in api worker frontend; do
               echo "==> Rolling update: $SERVICE"
 
+              # Capture existing container IDs for this service
               sudo docker compose ps -q "$SERVICE" 2>/dev/null > /tmp/old_ids.txt || true
+              OLD_COUNT=$(wc -l < /tmp/old_ids.txt)
+              OLD_ID=$(head -1 /tmp/old_ids.txt)
 
-              # Start new container alongside old one
-              sudo docker compose up -d --no-deps --scale "${SERVICE}=2" "$SERVICE" || true
+              if [ -z "$OLD_ID" ]; then
+                # First deploy — no rolling needed
+                sudo docker compose up -d --no-deps "$SERVICE"
+                echo "$SERVICE started (first deploy)"
+                continue
+              fi
+
+              echo "Old container: $OLD_ID"
+
+              # Scale up preserving the old container (--no-recreate keeps old ID stable)
+              sudo docker compose up -d --no-deps --no-recreate --scale "${SERVICE}=$((OLD_COUNT + 1))" "$SERVICE"
               sleep 5
 
               # Identify the new container (ID not in the pre-scale list)
               NEW_ID=$(sudo docker compose ps -q "$SERVICE" 2>/dev/null | grep -vxFf /tmp/old_ids.txt | head -1)
-              OLD_ID=$(cat /tmp/old_ids.txt | head -1)
+              echo "New container: $NEW_ID"
 
-              if [ -z "$NEW_ID" ]; then
-                echo "Failed to start new container for $SERVICE"
+              if [ -z "$NEW_ID" ] || [ "$NEW_ID" = "$OLD_ID" ]; then
+                echo "Failed to identify new container for $SERVICE"
                 exit 1
               fi
 
@@ -327,12 +341,12 @@ jobs:
                   HEALTHY=true
                   break
                 fi
-                sleep 5
+                sleep 3
               done
 
               if [ "$HEALTHY" = "true" ]; then
-                [ -n "$OLD_ID" ] && sudo docker stop "$OLD_ID" && sudo docker rm "$OLD_ID" || true
-                sudo docker compose up -d --no-deps --scale "${SERVICE}=1" "$SERVICE" || true
+                sudo docker stop "$OLD_ID" && sudo docker rm "$OLD_ID" || true
+                sudo docker compose up -d --no-deps --no-recreate --scale "${SERVICE}=1" "$SERVICE" || true
                 echo "$SERVICE updated successfully"
               else
                 sudo docker stop "$NEW_ID" && sudo docker rm "$NEW_ID" || true
