@@ -3,6 +3,7 @@ services:
   redis:
     image: redis:7-alpine
     command: redis-server --requirepass ${REDIS_PASSWORD}
+    restart: unless-stopped
     networks:
       - internal
     # intentionally no ports: block — Redis must not be exposed on the host
@@ -19,6 +20,7 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -42,6 +44,7 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -58,6 +61,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       API_HOST: api
       APP_ENV: ${APP_ENV}
