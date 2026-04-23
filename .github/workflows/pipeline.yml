@@ -297,7 +297,29 @@ jobs:
             git reset --hard origin/main
             sudo docker compose build
 
-            # Roll each service individually
+            # Ensure Redis is running (stateful — no rolling update needed)
+            # Must start BEFORE rolling out api/worker since they depend on it
+            sudo docker compose up -d redis
+
+            # Wait for Redis to be healthy
+            echo "==> Waiting for Redis to be healthy..."
+            REDIS_DEADLINE=$(($(date +%s) + 60))
+            while [ "$(date +%s)" -lt "$REDIS_DEADLINE" ]; do
+              REDIS_ID=$(sudo docker compose ps -q redis)
+              REDIS_HEALTH=$(sudo docker inspect -f '{{.State.Health.Status}}' "$REDIS_ID" 2>/dev/null || echo "unknown")
+              if [ "$REDIS_HEALTH" = "healthy" ]; then
+                echo "Redis is healthy"
+                break
+              fi
+              sleep 3
+            done
+
+            if [ "$REDIS_HEALTH" != "healthy" ]; then
+              echo "Redis failed to become healthy — aborting deploy"
+              exit 1
+            fi
+
+            # Roll each stateless service individually
             for SERVICE in api worker frontend; do
               echo "==> Rolling update: $SERVICE"
 
